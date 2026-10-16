@@ -1,6 +1,3 @@
-import { eq } from "drizzle-orm";
-import { getDb } from "@/db";
-import { passes } from "@/db/schema";
 import { getWalletProvider, type PassData } from "@/lib/wallet-provider";
 
 export class HttpError extends Error { constructor(readonly status: number, message: string) { super(message); } }
@@ -27,18 +24,19 @@ export function validateUpdate(input: unknown) {
 
 export async function createPass(input: unknown) {
   const data = validateNewPass(input); const id = crypto.randomUUID().replace(/-/g, ""); const provider = getWalletProvider();
-  const created = await provider.createPass({ id, ...data }); const now = new Date().toISOString();
-  await getDb().insert(passes).values({ id, ...data, value: String(data.value), walletProvider: provider.mode, providerObjectId: created.providerObjectId, createdAt: now, updatedAt: now });
+  const created = await provider.createPass({ id, ...data });
   return { id, saveUrl: created.saveUrl, value: data.value, mode: provider.mode };
 }
 
 export async function updatePass(id: string, input: unknown) {
   if (!idPattern.test(id)) throw new HttpError(400, "Invalid pass ID.");
-  const value = validateUpdate(input); const db = getDb(); const pass = await db.query.passes.findFirst({ where: eq(passes.id, id) });
-  if (!pass) throw new HttpError(404, "Pass not found.");
+  const value = validateUpdate(input);
   const provider = getWalletProvider();
-  if (provider.mode !== pass.walletProvider) throw new HttpError(409, "The configured Wallet provider does not match this pass.");
-  await provider.updatePass(pass.providerObjectId, { id, name: pass.name, label: pass.label, value });
-  await db.update(passes).set({ value: String(value), updatedAt: new Date().toISOString() }).where(eq(passes.id, id));
+  if (provider.mode !== "google") throw new HttpError(409, "Live Google Wallet credentials are required to update a pass.");
+  // The Google object ID is issuer ID + the pass ID returned at creation.
+  // It remains addressable after a Vercel serverless function restarts.
+  const issuerId = process.env.GOOGLE_WALLET_ISSUER_ID;
+  if (!issuerId) throw new Error("Missing server configuration: GOOGLE_WALLET_ISSUER_ID");
+  await provider.updatePass(`${issuerId}.${id}`, { id, name: "", label: "", value });
   return { id, value, updated: true };
 }

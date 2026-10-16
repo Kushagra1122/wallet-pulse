@@ -1,5 +1,3 @@
-import { env } from "cloudflare:workers";
-
 export type PassData = { id: string; name: string; label: string; value: number };
 export type ProviderCreateResult = { providerObjectId: string; saveUrl: string };
 
@@ -34,9 +32,9 @@ async function signJwt(claims: Record<string, unknown>, privateKey: string) {
   return `${signingInput}.${base64Url(signature)}`;
 }
 
-function required(name: keyof Cloudflare.Env) {
-  const value = env[name];
-  if (!value || typeof value !== "string") throw new Error(`Missing server configuration: ${name}`);
+function required(name: "GOOGLE_WALLET_ISSUER_ID" | "GOOGLE_WALLET_CLASS_ID" | "GOOGLE_SERVICE_ACCOUNT_EMAIL" | "GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY") {
+  const value = process.env[name];
+  if (!value) throw new Error(`Missing server configuration: ${name}`);
   return value;
 }
 
@@ -85,9 +83,7 @@ class GoogleWalletProvider implements WalletProvider {
 
   async updatePass(providerObjectId: string, pass: PassData) {
     await this.google("PATCH", `/genericObject/${encodeURIComponent(providerObjectId)}`, {
-      header: { defaultValue: { language: "en-US", value: pass.label } },
       subheader: { defaultValue: { language: "en-US", value: String(pass.value) } },
-      textModulesData: [{ id: "live-value", header: pass.label, body: String(pass.value) }],
     });
   }
 }
@@ -98,4 +94,4 @@ class MockWalletProvider implements WalletProvider {
   async updatePass() { return; }
 }
 
-export function getWalletProvider(): WalletProvider { return env.WALLET_PROVIDER === "google" ? new GoogleWalletProvider() : new MockWalletProvider(); }
+export function getWalletProvider(): WalletProvider { return process.env.WALLET_PROVIDER === "google" ? new GoogleWalletProvider() : new MockWalletProvider(); }

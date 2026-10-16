@@ -1,4 +1,5 @@
 import { HttpError, createPass } from "@/lib/pass-service";
+export const runtime = "nodejs";
 
 export async function POST(request: Request) {
   try { return Response.json(await createPass(await request.json()), { status: 201 }); }
